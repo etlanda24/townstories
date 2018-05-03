@@ -2,11 +2,8 @@
 
 require_once __DIR__.'/../vendor/autoload.php';
 
-try {
-    (new Dotenv\Dotenv(__DIR__.'/../'))->load();
-} catch (Dotenv\Exception\InvalidPathException $e) {
-    //
-}
+ Dotenv::load(__DIR__.'/../');
+
 
 /*
 |--------------------------------------------------------------------------
@@ -20,11 +17,33 @@ try {
 */
 
 $app = new Laravel\Lumen\Application(
-    realpath(__DIR__.'/../')
+    realpath(__DIR__ . '/../')
 );
 
 $app->withFacades();
 
+// Register facades aliases
+
+if (!class_exists('Config'))
+    class_alias(\Illuminate\Support\Facades\Config::class, 'Config');
+
+if (!class_exists('JWTAuth'))
+    class_alias(\Tymon\JWTAuth\Facades\JWTAuth::class, 'JWTAuth');
+
+if (!class_exists('JWTFactory'))
+    class_alias(\Tymon\JWTAuth\Facades\JWTFactory::class, 'JWTFactory');
+
+if (!class_exists('OAuth'))
+    class_alias(\Artdarek\OAuth\Facade\OAuth::class, 'OAuth');
+
+// Load configuration files
+$app->configure('constants');
+$app->configure('cors');
+$app->configure('auth');
+$app->configure('jwt');
+
+
+// Enable eloquent
 $app->withEloquent();
 
 /*
@@ -59,12 +78,13 @@ $app->singleton(
 |
 */
 
-// $app->middleware([
-//    App\Http\Middleware\ExampleMiddleware::class
-// ]);
+$app->middleware([
+    Barryvdh\Cors\HandleCors::class,
+    App\Http\Middleware\FormattingRequestMiddleware::class,
+]);
 
 $app->routeMiddleware([
-    'auth' => App\Http\Middleware\Authenticate::class,
+    'jwt.auth'    => \App\Http\Middleware\GetUserFromToken::class,
 ]);
 
 /*
@@ -78,10 +98,20 @@ $app->routeMiddleware([
 |
 */
 
-// $app->register(App\Providers\AppServiceProvider::class);
-$app->register(App\Providers\AuthServiceProvider::class);
-// $app->register(App\Providers\EventServiceProvider::class);
-$app->register(Tymon\JWTAuth\Providers\LumenServiceProvider::class);
+$app->register(App\Providers\AppServiceProvider::class);
+$app->register(App\Providers\EventServiceProvider::class);
+
+// Third party service provider
+$app->register(\Barryvdh\Cors\LumenServiceProvider::class);
+$app->register(\Tymon\JWTAuth\Providers\JWTAuthServiceProvider::class);
+$app->register(\Pvm\ArtisanBeans\ArtisanBeansServiceProvider::class);
+$app->register(Vluzrmos\Tinker\TinkerServiceProvider::class);
+$app->register(Bugsnag\BugsnagLaravel\BugsnagServiceProvider::class);
+
+// enable query log
+// if(env('APP_DEBUG') AND env('APP_ENV') != 'testing')
+    //DB::enableQueryLog();
+
 /*
 |--------------------------------------------------------------------------
 | Load The Application Routes
@@ -93,10 +123,9 @@ $app->register(Tymon\JWTAuth\Providers\LumenServiceProvider::class);
 |
 */
 
-$app->router->group([
-    'namespace' => 'App\Http\Controllers',
-], function ($router) {
-    require __DIR__.'/../routes/web.php';
+
+$app->group(['namespace' => 'App\Http\Controllers'], function ($app) {
+    require __DIR__.'/../app/Http/routes.php';
 });
 
 return $app;
